@@ -2,6 +2,10 @@
 
 Thanks a lot for contributing to Komga!
 
+## Requirements
+
+You will need Java JDK version 25.
+
 ## Commit messages
 
 Komga's commit messages follow the [Conventional Commits](https://www.conventionalcommits.org/) standard. This enables automatic versioning, releases, and release notes generation.
@@ -15,4 +19,3 @@ Komga is composed of 4 projects:
 - `komga-tray`: a thin desktop wrapper that displays a tray-icon
 
 Check the `README.md` files in each project for more details.
-

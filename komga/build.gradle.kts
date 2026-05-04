@@ -1,5 +1,6 @@
 import nu.studer.gradle.jooq.JooqGenerate
 import org.flywaydb.gradle.task.FlywayMigrateTask
+import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.util.prefixIfNot
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
@@ -16,6 +17,12 @@ plugins {
   id("org.springdoc.openapi-gradle-plugin") version "1.9.0"
   id("com.google.devtools.ksp") version "2.3.1"
   jacoco
+}
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(25)
+  }
 }
 
 val benchmarkSourceSet =
@@ -146,8 +153,9 @@ dependencies {
 }
 
 kotlin {
+  jvmToolchain(25)
   compilerOptions {
-    jvmTarget = JvmTarget.JVM_17
+    jvmTarget = JvmTarget.JVM_25
     freeCompilerArgs =
       listOf(
         "-Xjsr305=strict",
@@ -159,16 +167,18 @@ kotlin {
 
 val webui = "$rootDir/komga-webui"
 val nextui = "$rootDir/next-ui"
+val enableNativeAccess = "--enable-native-access=ALL-UNNAMED"
 tasks {
   withType<JavaCompile> {
-    sourceCompatibility = "17"
-    targetCompatibility = "17"
+    sourceCompatibility = "25"
+    targetCompatibility = "25"
   }
 
   withType<Test> {
     useJUnitPlatform()
     systemProperty("spring.profiles.active", "test")
     maxHeapSize = "1G"
+    jvmArgs(enableNativeAccess)
   }
 
   withType<Jar> {
