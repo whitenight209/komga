@@ -38,6 +38,7 @@ tasks.named<DependencyUpdatesTask>("dependencyUpdates") {
 allprojects {
   repositories {
     mavenCentral()
+    maven("https://jitpack.io")
   }
   apply(plugin = "org.jlleitschuh.gradle.ktlint")
 
