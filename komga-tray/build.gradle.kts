@@ -7,9 +7,9 @@ plugins {
     kotlin("plugin.spring")
   }
   alias(libs.plugins.gradleGitProperties)
-  id("org.jetbrains.compose") version "1.8.2"
-  id("org.jetbrains.kotlin.plugin.compose") version "2.3.0"
-  id("dev.hydraulic.conveyor") version "1.13"
+  alias(libs.plugins.compose)
+  id("org.jetbrains.kotlin.plugin.compose") version "2.4.10"
+  id("dev.hydraulic.conveyor") version "2.0"
   application
 }
 
@@ -44,12 +44,12 @@ dependencies {
   implementation(project(":komga"))
 
   implementation(compose.desktop.currentOs)
-  implementation(compose.components.resources)
+  implementation("org.jetbrains.compose.components:components-resources:${libs.versions.compose.get()}")
 
-  linuxAmd64(compose.desktop.linux_x64)
-  macAmd64(compose.desktop.macos_x64)
-  macAarch64(compose.desktop.macos_arm64)
-  windowsAmd64(compose.desktop.windows_x64)
+  linuxAmd64("org.jetbrains.compose.desktop:desktop-jvm-linux-x64:${libs.versions.compose.get()}")
+  macAmd64("org.jetbrains.compose.desktop:desktop-jvm-macos-x64:${libs.versions.compose.get()}")
+  macAarch64("org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:${libs.versions.compose.get()}")
+  windowsAmd64("org.jetbrains.compose.desktop:desktop-jvm-windows-x64:${libs.versions.compose.get()}")
 }
 
 application {
