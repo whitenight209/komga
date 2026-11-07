@@ -374,3 +374,15 @@ KOReader Sync API는 KOReader의 진행률 동기화 프로토콜과 호환되�
 - 트레이 UI: `komga-tray/src/main/kotlin/org/gotson/komga/application/gui/TrayIconRunner.kt`
 - 오류 다이얼로그: `komga-tray/src/main/kotlin/org/gotson/komga/application/gui/ErrorDialog.kt`
 - 리소스: `komga-tray/src/main/resources/icons`, `messages*.properties`
+
+### 부팅 시 복호화 비밀번호 자동 로드
+
+서비스 실행 환경에 `KOMGA_DECRYPTION_PASSWORD_FILE=/etc/komga/decryption-password`를 설정하면 서버 시작 시 해당 UTF-8 파일을 한 번 읽습니다. JAR 직접 실행과 `scripts/komga.sh start` 모두 지원하며, 스크립트는 파일 경로가 설정된 경우 비밀번호 입력을 요청하지 않습니다.
+
+- 파일에는 비밀번호 한 줄을 저장합니다. 끝의 LF 또는 CRLF 한 개는 제거하고, 비밀번호 앞뒤 공백은 유지합니다.
+- 파일 비밀번호는 기존 `komga.media-file-decryption.password`보다 우선합니다. 환경 변수 대신 `komga.media-file-decryption.password-file` 설정도 사용할 수 있으며, 둘 다 지정하면 환경 변수가 우선합니다.
+- 지정한 파일을 읽을 수 없거나 비어 있거나 여러 줄이면 서버 시작에 실패합니다. 실제 비밀번호의 유효성은 암호화된 책을 열 때 확인합니다.
+- 비밀번호는 EPUB·CBZ·PDF에 공통 적용되며, 변경 후에는 서버를 재시작해야 합니다.
+- 파일은 저장소 밖에 두고 서비스 계정 소유로 설정한 뒤 `chmod 0400 /etc/komga/decryption-password`로 읽기 권한을 제한합니다. 환경 변수는 서비스 관리자(systemd 등)의 실행 환경에 설정해야 합니다.
+
+예: `KOMGA_DECRYPTION_PASSWORD_FILE=/etc/komga/decryption-password java -jar komga.jar`

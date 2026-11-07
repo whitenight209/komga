@@ -101,8 +101,20 @@ start() {
   java_opts="${JAVA_OPTS:-}"
   komga_opts="${KOMGA_OPTS:-}"
 
-  read -r -s -p "Media file decryption password (leave empty to skip): " password
-  echo
+  password=""
+  if [[ -n "${KOMGA_DECRYPTION_PASSWORD_FILE:-}" ]]; then
+    # The server reads the file directly, without an intermediate config file.
+    if [[ ! -f "$KOMGA_DECRYPTION_PASSWORD_FILE" || ! -r "$KOMGA_DECRYPTION_PASSWORD_FILE" || ! -s "$KOMGA_DECRYPTION_PASSWORD_FILE" ]]; then
+      echo "Decryption password file must be a readable, non-empty regular file" >&2
+      exit 1
+    fi
+    # Resolve before changing to APP_DIR.
+    KOMGA_DECRYPTION_PASSWORD_FILE="$(cd "$(dirname "$KOMGA_DECRYPTION_PASSWORD_FILE")" && pwd)/$(basename "$KOMGA_DECRYPTION_PASSWORD_FILE")"
+    export KOMGA_DECRYPTION_PASSWORD_FILE
+  elif [[ -t 0 ]]; then
+    read -r -s -p "Media file decryption password (leave empty to skip): " password
+    echo
+  fi
 
   secret_config=""
   if [[ -n "$password" ]]; then

@@ -26,6 +26,11 @@ class KomgaProperties {
     }
   }
 
+  @PostConstruct
+  fun loadDecryptionPassword() {
+    DecryptionPasswordFile.load(mediaFileDecryption, System.getenv("KOMGA_DECRYPTION_PASSWORD_FILE"))
+  }
+
   @Positive
   var pageHashing: Int = 3
 
@@ -117,5 +122,6 @@ class KomgaProperties {
 
   class MediaFileDecryption {
     var password: String? = null
+    var passwordFile: String? = null
   }
 }

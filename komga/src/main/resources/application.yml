@@ -20,6 +20,7 @@ komga:
   lucene:
     data-directory: \${komga.config-dir}/lucene
   # media-file-decryption:
+  #   password-file: "/etc/komga/decryption-password"
   #   password: "your-password"
   fonts:
     data-directory: \${komga.config-dir}/fonts
