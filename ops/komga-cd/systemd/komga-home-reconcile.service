@@ -1,0 +1,22 @@
+[Unit]
+Description=Verify and reconcile the pinned Komga release on this host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=komga-deploy
+Group=komga-release-readers
+# Dry run by default. To enable verified transitions, copy and edit this unit
+# after pinning the baseline, verifying JVM/health, and approving each transition.
+ExecStart=/usr/bin/python3 /usr/local/lib/komga-home/komga-home-deploy.py --config /etc/komga-home-deploy.json reconcile
+# Optional root-controlled read-only release token:
+# EnvironmentFile=/etc/komga-home-token.env
+UMask=0027
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/komga-deploy
+# Do not use NoNewPrivileges if your approved hook requires narrowly scoped sudo.
+# Prefer an audited local authorization rule that permits only restarting komga.service.
+TimeoutStartSec=15min

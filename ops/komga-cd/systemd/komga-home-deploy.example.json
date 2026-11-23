@@ -1,0 +1,9 @@
+{
+  "deploy_directory": "/var/lib/komga-deploy",
+  "health_url": "http://127.0.0.1:25600/ebook/actuator/health",
+  "restart_command": ["/usr/bin/sudo", "-n", "/usr/bin/systemctl", "restart", "komga.service"],
+  "service_java_executable": "/usr/bin/java",
+  "minimum_java_major": 25,
+  "auto_rollback_safe": false,
+  "approved_transitions": []
+}
