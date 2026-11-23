@@ -1,0 +1,204 @@
+name: Komga Home Pipeline
+
+on:
+  schedule:
+    - cron: '23 18 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: komga-home-default
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository_id == '1228684283' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    outputs:
+      mode: ${{ steps.sync.outputs.mode }}
+      base: ${{ steps.sync.outputs.base }}
+      upstream: ${{ steps.sync.outputs.upstream }}
+      head: ${{ steps.sync.outputs.head }}
+      pr: ${{ steps.sync.outputs.pr }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Locate or create a controlled sync PR
+        id: sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIPELINE_MODE: ${{ vars.KOMGA_PIPELINE_MODE }}
+          DEPLOYED_BASELINE: ${{ vars.KOMGA_DEPLOYED_BASELINE }}
+        run: python3 ops/komga-ci/pipeline.py sync
+
+  review:
+    needs: sync
+    if: needs.sync.outputs.head != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      approved: ${{ steps.review.outputs.approved }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Inspect candidate as inert patch data, no tool execution or checkout
+        id: review
+        env:
+          OPENAI_API_KEY: ${{ secrets.KOMGA_REVIEW_OPENAI_API_KEY }}
+          CODEX_MODEL: ${{ vars.KOMGA_CODEX_MODEL }}
+          BASE_SHA: ${{ needs.sync.outputs.base }}
+          HEAD_SHA: ${{ needs.sync.outputs.head }}
+          UPSTREAM_SHA: ${{ needs.sync.outputs.upstream }}
+        run: python3 ops/komga-ci/pipeline.py review "$BASE_SHA" "$HEAD_SHA" "$UPSTREAM_SHA"
+
+  candidate:
+    needs: sync
+    if: needs.sync.outputs.head != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.sync.outputs.head }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: next-ui/.nvmrc
+      - name: Remember the Next UI Node binary path
+        shell: bash
+        run: printf 'NODE_NEXT_PATH=%s\n' "$(dirname "$(command -v node)")" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: komga-webui/.nvmrc
+      - name: Build both web UIs, test Komga and inspect the executable JAR
+        env:
+          EXPECTED_SHA: ${{ needs.sync.outputs.head }}
+        run: bash ops/komga-ci/build.sh "$EXPECTED_SHA" test
+
+  statuses:
+    needs: [sync, review, candidate]
+    if: ${{ !cancelled() && needs.sync.result == 'success' && needs.sync.outputs.head != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Record only managed job outcomes on the exact PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.sync.outputs.head }}
+          CI_RESULT: ${{ needs.candidate.result }}
+          AI_APPROVED: ${{ needs.review.result == 'success' && needs.review.outputs.approved == 'true' }}
+        run: python3 ops/komga-ci/pipeline.py report "$HEAD_SHA" "$CI_RESULT" "$AI_APPROVED"
+
+  merge:
+    needs: [sync, review, candidate, statuses]
+    if: needs.sync.outputs.mode == 'promote' && needs.review.result == 'success' && needs.review.outputs.approved == 'true' && needs.candidate.result == 'success' && needs.statuses.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+      statuses: read
+    outputs:
+      commit: ${{ steps.merge.outputs.merged }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Attempt normal exact-HEAD merge without bypass
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ needs.sync.outputs.base }}
+          HEAD_SHA: ${{ needs.sync.outputs.head }}
+          UPSTREAM_SHA: ${{ needs.sync.outputs.upstream }}
+          PR_NUMBER: ${{ needs.sync.outputs.pr }}
+          DEPLOYED_BASELINE: ${{ vars.KOMGA_DEPLOYED_BASELINE }}
+        run: python3 ops/komga-ci/pipeline.py merge "$BASE_SHA" "$HEAD_SHA" "$UPSTREAM_SHA" "$PR_NUMBER"
+
+  package:
+    needs: merge
+    if: needs.merge.outputs.commit != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.merge.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: next-ui/.nvmrc
+      - name: Remember the Next UI Node binary path
+        shell: bash
+        run: printf 'NODE_NEXT_PATH=%s\n' "$(dirname "$(command -v node)")" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: komga-webui/.nvmrc
+      - name: Test and package the exact merged SHA again
+        env:
+          EXPECTED_SHA: ${{ needs.merge.outputs.commit }}
+        run: bash ops/komga-ci/build.sh "$EXPECTED_SHA" package
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: komga-home-${{ needs.merge.outputs.commit }}
+          path: dist/komga.jar
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [merge, package]
+    if: needs.package.result == 'success' && vars.KOMGA_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: komga-home-${{ needs.merge.outputs.commit }}
+          path: release-payload
+      - name: Verify and publish the complete release as non-latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGED_SHA: ${{ needs.merge.outputs.commit }}
+        run: python3 ops/komga-ci/pipeline.py publish "$MERGED_SHA" release-payload

@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Komga reconciliation at 03:30 Korea time
+
+[Timer]
+OnCalendar=*-*-* 03:30,40,50:00 Asia/Seoul
+OnCalendar=*-*-* 04:00,10,20,30,40,50:00 Asia/Seoul
+AccuracySec=1min
+Persistent=true
+Unit=komga-home-reconcile.service
+
+[Install]
+WantedBy=timers.target
