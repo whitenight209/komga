@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-15
     timeout-minutes: 50
     defaults:
       run:
@@ -38,7 +38,8 @@ jobs:
         env:
           EXPECTED_COMMIT: ${{ inputs.commit }}
         run: |
-          test "$(uname -m)" = aarch64
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
           if [[ -n "$EXPECTED_COMMIT" ]]; then
             [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
             test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
@@ -75,10 +76,10 @@ jobs:
           find komga/build/libs -maxdepth 1 -name 'komga-*.jar' ! -name '*-plain.jar' -exec cp {} dist/ \;
           test "$(find dist -name '*.jar' | wc -l)" -eq 1
           cd dist
-          sha256sum ./*.jar > SHA256SUMS
+          shasum -a 256 ./*.jar > SHA256SUMS
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: komga-jar-${{ github.sha }}
+          name: komga-jar-${{ inputs.commit || github.sha }}
           path: dist/*
           retention-days: 30
           if-no-files-found: error
