@@ -1,0 +1,84 @@
+name: ARM64 binary CI
+run-name: ARM64 binary CI · ${{ inputs.commit || github.sha }}
+
+on:
+  push:
+    branches: [apps]
+  pull_request:
+    branches: [apps]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full commit SHA to build (defaults to the selected branch)
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: binary-ci-${{ github.event.pull_request.head.sha || inputs.commit || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: .
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the requested commit and ARM64 host
+        env:
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          test "$(uname -m)" = aarch64
+          if [[ -n "$EXPECTED_COMMIT" ]]; then
+            [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+            test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          fi
+      - uses: ./.github/actions/setup-web
+        with:
+          working-directory: komga-webui
+      - name: Test and build the legacy WebUI
+        working-directory: komga-webui
+        run: |
+          npm run test:unit
+          npm run build
+      - uses: ./.github/actions/setup-web
+        with:
+          working-directory: next-ui
+      - name: Test and build Next UI
+        working-directory: next-ui
+        run: |
+          npm run test:unit
+          npm run build:with-i18n
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880
+        with:
+          java-version: '25'
+          distribution: temurin
+          cache: gradle
+          cache-dependency-path: |
+            **/*.gradle*
+            gradle/wrapper/gradle-wrapper.properties
+      - name: Test Komga and build the executable JAR
+        run: ./gradlew :komga:test :komga:webuiCopyIndex :komga:nextuiCopyIndex :komga:bootJar
+      - name: Package executable JAR and checksum
+        run: |
+          mkdir -p dist
+          find komga/build/libs -maxdepth 1 -name 'komga-*.jar' ! -name '*-plain.jar' -exec cp {} dist/ \;
+          test "$(find dist -name '*.jar' | wc -l)" -eq 1
+          cd dist
+          sha256sum ./*.jar > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: komga-jar-${{ github.sha }}
+          path: dist/*
+          retention-days: 30
+          if-no-files-found: error
